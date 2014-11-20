@@ -1,0 +1,376 @@
+---
+title: 'Coursera Data Science Capstone Project: Milestone Report, Exploratory Analysis'
+author: "Peggy Fan"
+date: "November 15, 2014"
+---
+
+#### Project Summary
+The goal of this project is to give some insights to the data structure and trends of text files from three sources: Twitter, News, and Blogs. We are using those datasets for building a predictive algorithm, which aims to gives the next possible word when an user enters some text (for Swiftkey). The Rmd file that I compiled for this report can be found [here.](https://github.com/PeggyFan/data_science_capstone)
+
+#### How much data am I using from each source file?
+Due to the limitation of memory and running time, I use a fraction of the data for the exploratory analyes. I created "training text files" by reading a certain percentage of the lines from each raw text file and saved them separately so I can load them directly for analyses. The table belows gives the statistics of my training data:
+
+```{r, echo=FALSE, results='asis', message=FALSE}
+tw_total <- "2360148"
+news_total <- "77259"
+blog_total <- "899200"
+  
+tw_lines <- "23601"
+news_lines <- "10000"
+blog_lines <- "10000"
+
+tw_pc <- "1%"
+news_pc <- "13%"
+blog_pc <- "1%"
+
+tw_words <- "294106"
+news_words <- "661261"
+blog_words <- "818080"
+
+tw_sum <- c(tw_total, tw_lines, tw_pc, tw_words)
+news_sum <- c(news_total, news_lines, news_pc, news_words)
+blog_sum <- c(blog_total, blog_lines, blog_pc, blog_words)
+
+sum <- as.data.frame(rbind(tw_sum, news_sum, blog_sum))
+colnames(sum) <- c("Total number of lines", "Lines in training data", "Percent of total", "Number of words in training data")  
+rownames(sum) <- c("Twitter", "News", "Blog")
+
+library(xtable)
+t <- xtable(sum, caption ="Data Summary Statistics")
+print.xtable(t,type="html",comment = getOption("xtable.comment", FALSE))
+```
+
+```{r, echo=FALSE, eval=FALSE}
+con <- file("./en_US.twitter.txt", "r") 
+tw_sample <- readLines(con, 47202, skipNul=TRUE) #2% of data
+close(con)
+
+tw_training <- sample(tw_sample, 23601) #50% of the sample
+```
+
+#### Loading training data 
+I loaded the training texts and performed pre-processing of texts. I removed punctuation, numbers, and white space, and transform all capital letters to lower-case for all three source texts. For twitter data, I also removed profanity using a list of profane words from "google's list of bad words" online. 
+
+```{r, echo=FALSE, message=FALSE, comment=NULL}
+library(tm)
+library(ggplot2) 
+setwd("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en")
+tw_training <- read.table("./tw_training.txt")
+twitter_training <- Corpus(VectorSource(tw_training))
+profanity <- VectorSource(readLines("profane_list.txt"))
+
+toSpace <- content_transformer (function (x, pattern) gsub(pattern, " ", x))
+eng <- tm_map(twitter_training, toSpace, "/|@|\\|" )
+eng <- tm_map(eng, removePunctuation)
+eng <- tm_map(eng, removeNumbers)
+eng <- tm_map(eng, content_transformer(tolower))
+#eng <- tm_map(eng, removeWords, stopwords("english"))
+eng <- tm_map(eng, stripWhitespace)
+eng <- tm_map(eng, removeWords, profanity)
+
+tw_corpus <- tm_map(eng, PlainTextDocument)
+
+#### Loading News training data ####
+setwd("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en")
+news_training <- read.table("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en/news_training.txt")
+news_training <- Corpus(VectorSource(news_training))
+
+toSpace <- content_transformer (function (x, pattern) gsub(pattern, " ", x))
+eng <- tm_map(news_training, toSpace, "/|@|\\|" )
+eng <- tm_map(eng, removePunctuation)
+eng <- tm_map(eng, removeNumbers)
+eng <- tm_map(eng, content_transformer(tolower))
+#eng <- tm_map(eng, removeWords, stopwords("english"))
+eng <- tm_map(eng, stripWhitespace)
+#eng <- tm_map(eng, stemDocument)
+
+news_corpus <- tm_map(eng, PlainTextDocument)
+
+#### Loading Blog training data ####
+setwd("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en")
+blog_training <- read.table("./blog_training.txt")
+blog_training <- Corpus(VectorSource(blog_training))
+
+toSpace <- content_transformer (function (x, pattern) gsub(pattern, " ", x))
+eng <- tm_map(blog_training, toSpace, "/|@|\\|" )
+eng <- tm_map(eng, removePunctuation)
+eng <- tm_map(eng, removeNumbers)
+eng <- tm_map(eng, content_transformer(tolower))
+#eng <- tm_map(eng, removeWords, stopwords("english"))
+eng <- tm_map(eng, stripWhitespace)
+#eng <- tm_map(eng, stemDocument)
+
+blog_corpus <- tm_map(eng, PlainTextDocument)
+```
+
+####Frequencies of n-grams
+I use n-grams as the method to build my prediction algorithm. For this exercise, I built tables for unigrams, bigrams, and trigrams. The n-gram that has the highest frequency from the training data will be used to infer the word that has the highest possibility to appear given the n-1 words in front of it. 
+
+To calculate the possibilities, the first step is to get a sense of how many unique n-grams appear in a corpus, and how many times each unique n-gram appears. I graph the top tweenty "number of occurrence" with the highest frequencies for each source, as a huge porportion of n-grams appear fewer than ten times (the graph would have been very long tail). 
+
+Then I calculate how many recurring unique n-grams (those that appear more than once) account for the total number of frequencies for all n-grams in the corpus, from which we can understand how much unique n-grams are needed to cover the corpus.
+
+#####For the Twitter data:
+For the unigrams:
+```{r, echo=FALSE, message=FALSE, comment=NA}
+library(RWeka)
+options(mc.cores=1)
+unigram <- NGramTokenizer(tw_corpus, Weka_control(min = 1, max = 1))
+tw_1gram <- as.data.frame(table(as.factor(unigram)))
+x <- as.data.frame(table(tw_1gram$Freq))
+x <- x[order(x$Freq, decreasing=TRUE),]
+tw_plot1 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Twitter Unigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(tw_1gram$Freq), "instances of unigrams in this corpus")
+cat("There are", nrow(tw_1gram),"unique entries")
+cat(nrow(tw_1gram[tw_1gram$Freq>1,]), "unigrams appear more than once")
+y <- tw_1gram[tw_1gram$Freq>1,]
+cat("Those unigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(tw_1gram$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those unigrams")
+tw_cov1 <-round((sum(y$Freq))/(sum(tw_1gram$Freq)), 2)*100
+```
+
+For the bigrams:
+```{r, echo=FALSE, message=FALSE, comment=NULL}
+bigram <- NGramTokenizer(tw_corpus, Weka_control(min = 2, max = 2))
+tw_bi <- as.data.frame(table(as.factor(bigram)))
+x <- as.data.frame(table(as.factor(tw_bi$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+tw_plot2 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Twitter Bigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(tw_bi$Freq), "instances of bigrams in this corpus")
+cat("There are", nrow(tw_bi),"unique entries")
+cat(nrow(tw_bi[tw_bi$Freq>1,]), "bigrams appear more than once")
+y <- tw_bi[tw_bi$Freq>1,]
+cat("Those bigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(tw_bi$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those bigrams")
+tw_cov2 <-round((sum(y$Freq))/(sum(tw_bi$Freq)), 2)*100
+```
+
+For the trigrams:
+```{r, echo=FALSE, message=FALSE, comment=NULL}
+trigram <- NGramTokenizer(tw_corpus, Weka_control(min = 3, max = 3))
+tw_tri <- as.data.frame(table(as.factor(trigram)))
+x <- as.data.frame(table(as.factor(tw_tri$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+tw_plot3 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Twitter Trigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(tw_tri$Freq), "instances of trigrams in this corpus")
+cat("There are", nrow(tw_tri),"unique entries")
+cat(nrow(tw_tri[tw_tri$Freq>1,]), "trigrams appear more than once")
+y <- tw_tri[tw_tri$Freq>1,]
+cat("Those trigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(tw_tri$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those trigrams")
+tw_cov3 <- round((sum(y$Freq))/(sum(tw_tri$Freq)), 2)*100
+```
+
+```{r, echo=FALSE, message=FALSE, comment=NULL}
+### Plotting
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  require(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+multiplot(tw_plot1, tw_plot2, tw_plot3, cols=3)
+```
+
+#####For the News data:
+For the unigrams:
+```{r, echo=FALSE, comment=NULL}
+unigram <- NGramTokenizer(news_corpus, Weka_control(min = 1, max = 1))
+news_1gram <- as.data.frame(table(as.factor(unigram)))
+x <- as.data.frame(table(as.factor(news_1gram$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+news_plot1 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="News Unigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(news_1gram$Freq), "instances of unigrams in this corpus")
+cat("There are", nrow(news_1gram),"unique entries")
+cat(nrow(news_1gram[news_1gram$Freq>1,]), "unigrams appear more than once")
+y <- news_1gram[news_1gram$Freq>1,]
+cat("Those unigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(news_1gram$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those unigrams")
+news_cov1 <- round((sum(y$Freq))/(sum(news_1gram$Freq)), 2)*100
+```
+
+For the bigrams:
+```{r, echo=FALSE, comment=NULL}
+bigram <- NGramTokenizer(news_corpus, Weka_control(min = 2, max = 2))
+news_bi <- as.data.frame(table(as.factor(bigram)))
+x <- as.data.frame(table(as.factor(news_bi$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+news_plot2 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="News Bigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(news_bi$Freq), "instances of bigrams in this corpus")
+cat("There are", nrow(news_bi),"unique entries")
+cat(nrow(news_bi[news_bi$Freq>1,]), "bigrams appear more than once")
+y <- news_bi[news_bi$Freq>1,]
+cat("Those bigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(news_bi$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those bigrams")
+news_cov2 <- round((sum(y$Freq))/(sum(news_bi$Freq)), 2)*100
+```
+
+For the trigrams:
+```{r, echo=FALSE, comment=NULL}
+trigram <- NGramTokenizer(news_corpus, Weka_control(min = 3, max = 3))
+news_tri <- as.data.frame(table(as.factor(trigram)))
+x <- as.data.frame(table(as.factor(news_tri$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+news_plot3 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="News Trigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(news_tri$Freq), "instances of unigrams in this corpus")
+cat("There are", nrow(news_tri),"unique entries")
+cat(nrow(news_tri[news_tri$Freq>1,]), "unigrams appear more than once")
+y <- news_tri[news_tri$Freq>1,]
+cat("Those unigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(news_tri$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those unigrams")
+news_cov3 <- round((sum(y$Freq))/(sum(news_tri$Freq)), 2)*100
+
+multiplot(news_plot1, news_plot2, news_plot3, cols=3)
+```
+
+#####For the Blog data:
+For the unigrams:
+```{r, echo=FALSE, comment=NULL}
+unigram <- NGramTokenizer(blog_corpus, Weka_control(min = 1, max = 1))
+blog_1gram <- as.data.frame(table(as.factor(unigram)))
+x <- as.data.frame(table(as.factor(blog_1gram$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+blog_plot1 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Blog Unigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(blog_1gram$Freq), "instances of unigrams in this corpus")
+cat("There are", nrow(blog_1gram),"unique entries")
+cat(nrow(blog_1gram[blog_1gram$Freq>1,]), "unigrams appear more than once")
+y <- blog_1gram[blog_1gram$Freq>1,]
+cat("Those unigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(blog_1gram$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those unigrams")
+blog_cov1 <- round((sum(y$Freq))/(sum(blog_1gram$Freq)), 2)*100
+```
+
+For the bigrams:
+```{r, echo=FALSE, comment=NULL}
+bigram <- NGramTokenizer(blog_corpus, Weka_control(min = 2, max = 2))
+blog_bi <- as.data.frame(table(as.factor(bigram)))
+x <- as.data.frame(table(as.factor(blog_bi$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+blog_plot2 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Blog Bigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(blog_bi$Freq), "instances of bigrams in this corpus")
+cat("There are", nrow(blog_bi),"unique entries")
+cat(nrow(blog_bi[blog_bi$Freq>1,]), "bigrams appear more than once")
+y <- blog_bi[blog_bi$Freq>1,]
+cat("Those bigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(blog_bi$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those bigrams")
+blog_cov2 <- round((sum(y$Freq))/(sum(blog_bi$Freq)), 2)*100
+```
+
+For the trigrams:
+```{r, echo=FALSE, comment=NULL}
+trigram <- NGramTokenizer(blog_corpus, Weka_control(min = 3, max = 3))
+blog_tri <- as.data.frame(table(as.factor(trigram)))
+x <- as.data.frame(table(as.factor(blog_tri$Freq)))
+x <- x[order(x$Freq, decreasing=TRUE),]
+blog_plot3 <- ggplot(x[1:20, ], aes(x = as.numeric(Var1), y = Freq)) + geom_bar(stat="identity") + 
+   scale_x_continuous(breaks=(c(1,5,10,15,20))) + 
+  labs(title="Blog Trigrams", x="Number of instances", y = "Frequency")
+
+cat("There are", sum(blog_tri$Freq), "instances of trigrams in this corpus")
+cat("There are", nrow(blog_tri),"unique entries")
+cat(nrow(blog_tri[blog_tri$Freq>1,]), "trigrams appear more than once")
+y <- blog_tri[blog_tri$Freq>1,]
+cat("Those trigrams appear", sum(y$Freq), "times in the corpus")
+cat(round((sum(y$Freq))/(sum(blog_tri$Freq)), 2)*100, "percent of the words instances of the corpus are covered by total number of instances of those trigrams")
+blog_cov3 <- round((sum(y$Freq))/(sum(blog_tri$Freq)), 2)*100
+
+multiplot(blog_plot1, blog_plot2, blog_plot3, cols=3)
+```
+
+The n-gram graphs of frequencies for all three sources are very skewed, and I only attempt to show the top twentiy frequencies. This suggests that a relatively small proportion of the words are used extremely often and represent a majority of the text.
+
+#### Summary tables and analyses
+
+```{r, echo=FALSE, results='asis', message=FALSE}
+tw_data <- c(sum(tw_1gram$Freq), length(tw_1gram$Var1), length(tw_bi$Var1), length(tw_tri$Var1))
+news_data <- c(sum(news_1gram$Freq), length(news_1gram$Var1), length(news_bi$Var1), length(news_tri$Var1))
+blog_data <- c(sum(blog_1gram$Freq), length(blog_1gram$Var1), length(blog_bi$Var1), length(blog_tri$Var1))
+data <- as.data.frame(rbind(tw_data, news_data, blog_data))
+colnames(data) <- c("Total word instances", "Unigrams", "Bigrams", "Trigrams")
+rownames(data) <- c("Twitter", "News", "Blog")
+t1 <- xtable(data, caption ="Number of N-grams")
+print.xtable(t1,type="html",comment = getOption("xtable.comment", FALSE))
+```
+
+The table shows that the number of bigrams is generally the lowest for all three source files. For blog data, it is interesting to see that total frequencies of trigrams are higher than that of unigrams. One would think that frequencies of trigrams would be the lowest because of the more restrictive nature of a combination of three-words, but perhaps the higher "N" allows more permutations and more possibilities to produce unique n-grams.
+
+```{r, echo=FALSE, results='asis', message=FALSE}
+Coverage1 <- c(tw_cov1, tw_cov2, tw_cov3)
+Coverage2 <- c(news_cov1, news_cov2, news_cov3)
+Coverage3 <- c(blog_cov1, blog_cov2, blog_cov3)
+coverage <- as.data.frame(rbind(Coverage1, Coverage2, Coverage3))
+colnames(coverage) <- c("Unigrams", "Bigrams", "Trigrams")
+rownames(coverage) <- c("Twitter", "News", "Blog")
+
+t2 <- xtable(coverage, caption ="Coverage of Frequencies by N-grams (%)")
+print.xtable(t2,type="html",comment = getOption("xtable.comment", FALSE))
+```
+
+
+A quick glance shows that news and blog data are highly simiar, while twitter data is quite distinct from the.For all three sources, unique unigrams cover the majority of the frequencies (above 90%), which is expected because higher the unique word count, the more words from the corpus it would include. However, unigram is highly variable, and in fact, not an option for our task for Swiftkey because we are asked to predict the next word given at least one word that comes before it. Bigrams and trigrams are more likely to be able to accomplish this task. 
+
+We see that unique bigrams cover a lower percentage of the total frequencies of bigrams across all three sources, but still around 50-60%% for news and blog data and especially low for twitter data
+at 23%. For trigrams, the coverage decreases further. Here we see a trade between precision (n-grams of higher order) and coverage. Bigrams give us more coverage but they are not precise for prediction as trigrams, which contain more information. Trigrams' coverage is much lower than that of bigrams.
+
+One thing to note is that for twitter data the drop in coverage is very steep, which means the twitter corpus is ver diverse and the frequencies of unique n-grams are in general low. This will make prediction difficult
+
+####Future steps
+The challenge of this project is how to use the limited training data we have to obtain maximal coverage of the corpora and optimizes the prediction process in terms of precision and time.
+
+For precision, we need to be able to identify words from the test data that may not be in the training corpus. Further reading on natural language processing gives me some possible models to use. For example, Good-turing smoothing removes some possibility from each present n-gram and set it aside for "unseen" words from the test data.
+
+We can address this problem also by using the Katz Backoff model, where we start with the higher degree n-gram, say a trigram. If nothing from the training trigrams match the test trigram (probability is zero), then we look at the bigram of the test text and find matching bigrams from the training data, and so forth. This reduces the number of ngrams in the dictionary we have to use for the prediction.
