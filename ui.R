@@ -1,9 +1,9 @@
 #### Capstone ui.R
 library(shinyIncubator)
 
-shinyUI(fluidPage(
-  tags$style(type='text/css', "body {background-color: #dce0f4; 
-             font-family: ‘Palatino Linotype’, ‘Book Antiqua’, Palatino, serif}"),
+shinyUI(fluidPage(theme = "bootstrap.css",
+  #tags$style(type='text/css', "body {background-color: #dce0f4; 
+             #font-family: ‘Palatino Linotype’, ‘Book Antiqua’, Palatino, serif}"),
 
   progressInit(),  
   tags$style(type="text/css",
@@ -16,9 +16,9 @@ shinyUI(fluidPage(
     p("Built for the Cousera Data Science Capstone Project in conjunction with SwiftKey. The goal of the application 
        is to predict the last word of a given phrase or sentence or as the actual Swiftkey functionality, next-word 
        prediction as the user types. This application provides comparison for two smoothing methods, Good-Turing and Kneser-Ney, 
-       in conjunction with a Katz Back-off model. " ),
-  helpText(HTML("For more information about the data, algorithm, and performance,
-       please visit <a href = \"https://github.com/PeggyFan?tab=repositories\">here.</a>")),   
+       in conjunction with a Katz Back-off model." ),
+  helpText(HTML("For the background information on this app,
+       please visit <a href = \"http://rpubs.com/Snowcreeks/49178\">here.</a>")),   
   helpText(HTML("The source codes are available on <a href = \"https://github.com/PeggyFan?tab=repositories\">Github.</a>"))
   ),
   

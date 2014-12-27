@@ -18,7 +18,6 @@ stemCompletion_mod <- function(x,dict=my_dict2) {
 #n3_SGT_DT  <- load("data/n3_SGT_DT")
 #n4_SGT_DT  <- load("data/n4_SGT_DT")
 
-new_table1  <- readRDS("data/new_table1F.Rds")
 new_table2  <- readRDS("data/new_table2F.Rds")
 new_table3  <- readRDS("data/new_table3F.Rds")
 new_table4  <- readRDS("data/new_table4F.Rds")

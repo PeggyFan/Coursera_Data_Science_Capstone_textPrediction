@@ -1,5 +1,5 @@
 ### Capstone server.R
-#setwd("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en/textPrediction")
+#setwd("/Users/peggyfan/Downloads/R_data/Capstone/corpus_en/textPredictionGT")
 
 library(tm)
 library(stringr)
@@ -14,17 +14,15 @@ options(shiny.maxRequestSize = 355000000)
 source("global.R")
 
 shinyServer(function(input, output, session) {
-  withProgress(session, {
-    setProgress(message = "Loading, please wait",
-               detail = "This may take a few moments...")
-    Sys.sleep(5)
-    setProgress(detail = "Still working...")
-    Sys.sleep(5)
-    setProgress(detail = "Just a few more moments...")
-    Sys.sleep(5) 
-    setProgress(detail = "Almost there...")
-    Sys.sleep(5) 
-    
+  #withProgress(session, {
+   # setProgress(message = "Loading, please wait",
+                #detail = "This may take a few moments...")
+    #Sys.sleep(3)
+    #setProgress(detail = "Still working...")
+    #Sys.sleep(5)
+    #setProgress(detail = "Just a few more moments...")
+    #Sys.sleep(5) 
+
 ############## GT TEXT INPUT ROWS ##############
 observe ({
   predictGT <- function(sentence) {
@@ -39,7 +37,7 @@ observe ({
     len <- length(sl)
     
     trigram <- paste(sl[len-2], sl[len-1], sl[len])
-    elems <- unlist(strsplit(trigram, " " ))
+    elems <- unlist(strsplit(trigram, "\\ " ))
     
     if (is.null(elems)) {return(predictList)}
     
@@ -47,8 +45,9 @@ observe ({
     setnames(m, c("word1", "word2", "word3"))
     m$start <- paste(m$word1, m$word2, m$word3)
     
-    match_Q <- subset(n4_table, start == m$start)
-    #match_Q <- n4_table[n4_table$start == m$trigram,]
+    setkey(n4_table, start)
+    setkey(m, start)
+    match_Q <- n4_table[start==m$start]
     
     if(nrow(match_Q) > 0) { 
       # use the counts in the Simple GT table to extract the probability
@@ -57,29 +56,30 @@ observe ({
       match_Q[, Pgt := n4_SGT_DT[match_Q]$p]
       
       match_Q <- match_Q[order(-Pgt)]
-      predictList <- match_Q$word4
+      predictList <- match_Q$word4[1:5]
     }
-    
     if (!is.null(predictList)) {  
       wordList <- list()
-      for (i in predictList[1:10]) {
+      for (i in predictList) {
         words <- lapply(i, stemCompletion_mod)[[1]]
         words <- unlist(words$content)
         if (!words=="NA") {wordList <-unlist(c(wordList, words))}
       }
       return(wordList)
-    }  
+    }
     
     
     ############## TRIGRAMS
     if(nrow(match_Q) == 0) {
       bigram <- paste(sl[len-1], sl[len])
-      elems <- unlist(strsplit(bigram, " " ))
+      elems <- unlist(strsplit(bigram, "\\ " ))
       m <- data.table(matrix(elems, ncol = 2, byrow = TRUE))
       setnames(m, c("word1", "word2"))
       m$start <- paste(m$word1, m$word2)
       
-      match_T <- subset(n3_table, start == m$start)
+      setkey(n3_table, start)
+      setkey(m, start)
+      match_T <- n3_table[start==m$start]
       
       if(nrow(match_T) > 0) { 
         # use the counts in the Simple GT table to extract the probability
@@ -88,93 +88,90 @@ observe ({
         match_T[, Pgt := n3_SGT_DT[match_T]$p]
         
         match_T<- match_T[order(-Pgt)]
-        predictList <- match_T$word3
-        #maxP <- max(match_Q$Pgt)
-        #predictList <-  match_Q$word4[match_Q$Pgt == maxP]
+        predictList <- match_T$word3[1:5]
       }
-      
       if (!is.null(predictList)) {  
         wordList <- list()
-        for (i in predictList[1:10]) {
+        for (i in predictList) {
           words <- lapply(i, stemCompletion_mod)[[1]]
           words <- unlist(words$content)
           if (!words=="NA") {wordList <-unlist(c(wordList, words))}
         }
         return(wordList)
-      }  
-
-        ################## BIGRAMS
-        if (nrow(match_T)==0) {
-          unigram <- paste(sl[len])
-          elems <- unlist(strsplit(unigram, " " ))
-          m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
-          setnames(m, c("word1"))
-          m$start <- paste(m$word1)
-          #m <- data.frame(lapply(m, as.character), stringsAsFactors=FALSE)
+      }
+      
+      ################## BIGRAMS
+      if (nrow(match_T)==0) {
+        unigram <- paste(sl[len])
+        elems <- unlist(strsplit(unigram, "\\ " ))
+        m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
+        setnames(m, c("word1"))
+        m$start <- paste(m$word1)
+        #m <- data.frame(lapply(m, as.character), stringsAsFactors=FALSE)
+        
+        setkey(n2_table, start)
+        setkey(m, start)
+        match_B <- n2_table[start==m$start]
+        
+        if(nrow(match_B) > 0) { 
+          # use the counts in the Simple GT table to extract the probability
+          setkey(match_B, count)
+          setkey(n2_SGT_DT, r)
+          match_B[, Pgt := n2_SGT_DT[match_B]$p]
           
-          match_B <- subset(n2_table, start == m$start)
+          match_B <- match_B[order(-Pgt)]
+          predictList <- match_B$word2[1:5]
+        }
+        if (!is.null(predictList)) {  
+          wordList <- list()
+          for (i in predictList) {
+            words <- lapply(i, stemCompletion_mod)[[1]]
+            words <- unlist(words$content)
+            if (!words=="NA") {wordList <-unlist(c(wordList, words))}
+          } 
+          return(wordList)
+        }
+        
+        ######################## UNIGRAM
+        
+        if(nrow(match_B) == 0) {
+          n1_table <- n1_table[order(-Pgt)]
+          predictList <-  n1_table[1:5]
           
-          if(nrow(match_B) > 0) { 
-            # use the counts in the Simple GT table to extract the probability
-            setkey(match_B, count)
-            setkey(n2_SGT_DT, r)
-            match_B[, Pgt := n2_SGT_DT[match_B]$p]
-            
-            match_B <- match_B[order(-Pgt)]
-            predictList <- match_B$word2
+          wordList <- list()
+          for (i in predictList[1:5]) {
+            words <- lapply(i, stemCompletion_mod)[[1]]
+            words <- unlist(words$content)
+            if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
           
-          if (!is.null(predictList)) {  
-            wordList <- list()
-            for (i in predictList[1:10]) {
-              words <- lapply(i, stemCompletion_mod)[[1]]
-              words <- unlist(words$content)
-              if (!words=="NA") {wordList <-unlist(c(wordList, words))}
-            }
-            return(wordList)
-          }  
-          
-          ######################## UNIGRAM
-          
-          if(nrow(match_B) == 0) {
-            n1_table <- n1_table[order(-Pgt)]
-            predictList <-  n1_table[1:5]
-            
-            wordList <- list()
-            for (i in predictList[1:10]) {
-              words <- lapply(i, stemCompletion_mod)[[1]]
-              words <- unlist(words$content)
-              if (!words=="NA") {wordList <-unlist(c(wordList, words))}
-            }
-            return(wordList)
-          }
-        }}}
+          return(predictList)
+        }
+      }}}
 
   ##### TEXT INPUT 1
   tx1 <- predictGT(input$text1)
-  tx1 <- tx1[1:5]
   tx1word1 <- tx1[1]
+  if (is.null(tx1word1)) {tx1word1<-""}
   if (is.na(tx1word1)) {tx1word1<-""}
   tx1word2 <- tx1[2]
+  if (is.null(tx1word2)) {tx1word2<-""}
   if (is.na(tx1word2)) {tx1word2<-""}
   tx1word3 <- tx1[3]
+  if (is.null(tx1word3)) {tx1word3<-""}
   if (is.na(tx1word3)) {tx1word3<-""}
-  tx1word4 <- tx1[4]
-  if (is.na(tx1word4)) {tx1word4<-""}
-  tx1word5 <- tx1[5]
-  if (is.na(tx1word5)) {tx1word5<-""}
-  tx1list <- c(tx1word1, tx1word2, tx1word3, tx1word4, tx1word5)
+  tx1list <- c(tx1word1, tx1word2, tx1word3)
   
   output$text2 <- renderText({
-    withProgress(session, min=1, max=15, expr={
-      for(i in 1:15) {
-        setProgress(message = 'Loading in progress',
-                    detail = 'Please wait...',
-                    value=i)
-        print(i)
-        Sys.sleep(0.1)
-      }
-      })
+    #withProgress(session, min=1, max=15, expr={
+      #for(i in 1:15) {
+        #setProgress(message = 'Loading in progress',
+         #           detail = 'Please wait...',
+          #          value=i)
+        #print(i)
+        #Sys.sleep(0.1)
+      #}
+      #})
     if(input$updateGT==0) (return("")) 
     else (return(tx1list[1])) #top 2 predicted word
   }) 
@@ -206,7 +203,7 @@ observe ({
     len <- length(sl)
     
     trigram <- paste(sl[len-2], sl[len-1], sl[len])
-    elems <- unlist(strsplit(trigram, " " ))
+    elems <- unlist(strsplit(trigram, "\\ " ))
     
     if (is.null(elems)) {return(predictList)}
     
@@ -214,124 +211,123 @@ observe ({
     setnames(m, c("word1", "word2", "word3"))
     m$start <- paste(m$word1, m$word2, m$word3)
     
-    match_Q <- subset(new_table4, start == m$start)
+    setkey(new_table4, start)
+    setkey(m, start)
+    match_Q <- new_table4[start==m$start]
     
     if(nrow(match_Q) > 0) { 
       # find the largest probability
       match_Q <- match_Q[order(-Pkn)]
-      predictList <- match_Q$word4
+      predictList <- match_Q$word4[1:5]
     }
     
     if (!is.null(predictList)) {  
       wordList <- list()
-      for (i in predictList[1:10]) {
+      for (i in predictList) {
         words <- lapply(i, stemCompletion_mod)[[1]]
         words <- unlist(words$content)
         if (!words=="NA") {wordList <-unlist(c(wordList, words))}
       }
       return(wordList)
-    }  
+    }
     
     ############## TRIGRAMS
     if(nrow(match_Q) == 0) {
       bigram <- paste(sl[len-1], sl[len])
-      elems <- unlist(strsplit(bigram, " " ))
+      elems <- unlist(strsplit(bigram, "\\ " ))
       m <- data.table(matrix(elems, ncol = 2, byrow = TRUE))
       setnames(m, c("word1", "word2"))
       m$start <- paste(m$word1, m$word2)
       
-      match_T <- subset(new_table3, start == m$start)
+      setkey(new_table3, start)
+      setkey(m, start)
+      match_T <- new_table3[start==m$start]
       
       if(nrow(match_T) > 0) { 
         # find the largest probability
         match_T <- match_T[order(-Pkn)]
-        predictList <- match_T$word3
+        predictList <- match_T$word3[1:5]
       }
       
       if (!is.null(predictList)) {  
         wordList <- list()
-        for (i in predictList[1:10]) {
+        for (i in predictList) {
           words <- lapply(i, stemCompletion_mod)[[1]]
           words <- unlist(words$content)
           if (!words=="NA") {wordList <-unlist(c(wordList, words))}
         }
         return(wordList)
-      }  
+      }
       
       ################## BIGRAMS
       if (nrow(match_T)==0) {
         unigram <- paste(sl[len])
-        elems <- unlist(strsplit(unigram, " " ))
+        elems <- unlist(strsplit(unigram, "\\ " ))
         m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
         setnames(m, c("word1"))
         m$start <- paste(m$word1)
         
-        match_B <- subset(new_table2, start == m$start)
+        setkey(new_table2, start)
+        setkey(m, start)
+        match_B <- new_table2[start==m$start]
         
         if(nrow(match_B) > 0) { 
-          # find the largest probability
           match_B <- match_B[order(-Pkn)]
-          predictList <- match_B$word2
+          predictList <- match_B$word2[1:5]
         }
         
         if (!is.null(predictList)) {  
           wordList <- list()
-          for (i in predictList[1:10]) {
+          for (i in predictList) {
             words <- lapply(i, stemCompletion_mod)[[1]]
             words <- unlist(words$content)
             if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
           return(wordList)
-        }  
+        }
         
         ######################## UNIGRAM
         
         if(nrow(match_B) == 0) {
-          new_table1 <- new_table1[order(-Pkn)]
-          predictList <-  new_table1[1:5]
+          n1_table <- n1_table[order(-Pgt)]
+          predictList <-  n1_table[1:5]
           
           wordList <- list()
-          for (i in predictList[1:10]) {
+          for (i in predictList) {
             words <- lapply(i, stemCompletion_mod)[[1]]
             words <- unlist(words$content)
             if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
+          
           return(wordList)
         }
       }}}
   
   ##### TEXT INPUT 2
-  tx2 <- predictKN(input$text5)
-  tx2 <- tx2[1:5]
-  
+  tx2 <- predictKN(input$text5) 
   tx2word1 <- tx2[1]
-  #if (is.null(tx2word1)) {tx2word1<-""}
+  if (is.null(tx2word1)) {tx2word1<-""}
   if (is.na(tx2word1)) {tx2word1<-""}
   tx2word2 <- tx2[2]
-  #if (is.null(tx2word2)) {tx2word2<-""}
+  if (is.null(tx2word2)) {tx2word2<-""}
   if (is.na(tx2word2)) {tx2word2<-""}
   tx2word3 <- tx2[3]
-  #if (is.null(tx2word3)) {tx2word3<-""}
+  if (is.null(tx2word3)) {tx2word3<-""}
   if (is.na(tx2word3)) {tx2word3<-""}
   tx2word4 <- tx2[4]
   #if (is.null(tx2word4)) {tx2word4<-""}
-  if (is.na(tx2word4)) {tx2word4<-""}
-  tx2word5 <- tx2[5]
-  #if (is.null(tx2word5)) {tx2word5<-""}
-  if (is.na(tx2word5)) {tx2word5<-""}
-  
-  tx2list <- c(tx2word1, tx2word2, tx2word3, tx2word4, tx2word5)
+  tx2list <- c(tx2word1, tx2word2, tx2word3)
   
   output$text6 <- renderText({ 
-    withProgress(session, min=1, max=15, expr={
-      for(i in 1:15) {
-        setProgress(message = 'Loading in progress',
-                    detail = 'Please wait...',
-                    value=i)
-        print(i)
-        Sys.sleep(0.1)
-      }
-    })
+    #withProgress(session, min=1, max=15, expr={
+      #for(i in 1:15) {
+       # setProgress(message = 'Loading in progress',
+        #            detail = 'Please wait...',
+         #           value=i)
+        #print(i)
+        #Sys.sleep(0.1)
+      #}
+    # })
     if(input$updateKN==0) (return("")) 
     else (return(tx2list[1])) #top 1 predicted word
   }) 
@@ -359,7 +355,7 @@ dataset <- reactive ({
     len <- length(sl)
     
     trigram <- paste(sl[len-2], sl[len-1], sl[len])
-    elems <- unlist(strsplit(trigram, " " ))
+    elems <- unlist(strsplit(trigram, "\\ " ))
     
     if (is.null(elems)) {return(predictList)}
     
@@ -367,8 +363,9 @@ dataset <- reactive ({
     setnames(m, c("word1", "word2", "word3"))
     m$start <- paste(m$word1, m$word2, m$word3)
     
-    match_Q <- subset(n4_table, start == m$start)
-    #match_Q <- n4_table[n4_table$start == m$trigram,]
+    setkey(n4_table, start)
+    setkey(m, start)
+    match_Q <- n4_table[start==m$start]
     
     if(nrow(match_Q) > 0) { 
       # use the counts in the Simple GT table to extract the probability
@@ -377,29 +374,30 @@ dataset <- reactive ({
       match_Q[, Pgt := n4_SGT_DT[match_Q]$p]
       
       match_Q <- match_Q[order(-Pgt)]
-      predictList <- match_Q$word4
+      predictList <- match_Q$word4[1:5]
     }
-    
     if (!is.null(predictList)) {  
       wordList <- list()
-      for (i in predictList[1:10]) {
+      for (i in predictList) {
         words <- lapply(i, stemCompletion_mod)[[1]]
         words <- unlist(words$content)
         if (!words=="NA") {wordList <-unlist(c(wordList, words))}
       }
       return(wordList)
-    }  
+    }
     
     
     ############## TRIGRAMS
     if(nrow(match_Q) == 0) {
       bigram <- paste(sl[len-1], sl[len])
-      elems <- unlist(strsplit(bigram, " " ))
+      elems <- unlist(strsplit(bigram, "\\ " ))
       m <- data.table(matrix(elems, ncol = 2, byrow = TRUE))
       setnames(m, c("word1", "word2"))
       m$start <- paste(m$word1, m$word2)
       
-      match_T <- subset(n3_table, start == m$start)
+      setkey(n3_table, start)
+      setkey(m, start)
+      match_T <- n3_table[start==m$start]
       
       if(nrow(match_T) > 0) { 
         # use the counts in the Simple GT table to extract the probability
@@ -408,68 +406,66 @@ dataset <- reactive ({
         match_T[, Pgt := n3_SGT_DT[match_T]$p]
         
         match_T<- match_T[order(-Pgt)]
-        predictList <- match_T$word3
-        #maxP <- max(match_Q$Pgt)
-        #predictList <-  match_Q$word4[match_Q$Pgt == maxP]
+        predictList <- match_T$word3[1:5]
       }
-      
       if (!is.null(predictList)) {  
         wordList <- list()
-        for (i in predictList[1:10]) {
+        for (i in predictList) {
           words <- lapply(i, stemCompletion_mod)[[1]]
           words <- unlist(words$content)
           if (!words=="NA") {wordList <-unlist(c(wordList, words))}
         }
         return(wordList)
-      }  
+      }
+      
+      ################## BIGRAMS
+      if (nrow(match_T)==0) {
+        unigram <- paste(sl[len])
+        elems <- unlist(strsplit(unigram, "\\ " ))
+        m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
+        setnames(m, c("word1"))
+        m$start <- paste(m$word1)
+        #m <- data.frame(lapply(m, as.character), stringsAsFactors=FALSE)
         
-        ################## BIGRAMS
-        if (nrow(match_T)==0) {
-          unigram <- paste(sl[len])
-          elems <- unlist(strsplit(unigram, " " ))
-          m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
-          setnames(m, c("word1"))
-          m$start <- paste(m$word1)
-          #m <- data.frame(lapply(m, as.character), stringsAsFactors=FALSE)
+        setkey(n2_table, start)
+        setkey(m, start)
+        match_B <- n2_table[start==m$start]
+        
+        if(nrow(match_B) > 0) { 
+          # use the counts in the Simple GT table to extract the probability
+          setkey(match_B, count)
+          setkey(n2_SGT_DT, r)
+          match_B[, Pgt := n2_SGT_DT[match_B]$p]
           
-          match_B <- subset(n2_table, start == m$start)
+          match_B <- match_B[order(-Pgt)]
+          predictList <- match_B$word2[1:5]
+        }
+        if (!is.null(predictList)) {  
+          wordList <- list()
+          for (i in predictList) {
+            words <- lapply(i, stemCompletion_mod)[[1]]
+            words <- unlist(words$content)
+            if (!words=="NA") {wordList <-unlist(c(wordList, words))}
+          } 
+          return(wordList)
+        }
+        
+        ######################## UNIGRAM
+        
+        if(nrow(match_B) == 0) {
+          n1_table <- n1_table[order(-Pgt)]
+          predictList <-  n1_table[1:5]
           
-          if(nrow(match_B) > 0) { 
-            # use the counts in the Simple GT table to extract the probability
-            setkey(match_B, count)
-            setkey(n2_SGT_DT, r)
-            match_B[, Pgt := n2_SGT_DT[match_B]$p]
-            
-            match_B <- match_B[order(-Pgt)]
-            predictList <- match_B$word2
+          wordList <- list()
+          for (i in predictList[1:5]) {
+            words <- lapply(i, stemCompletion_mod)[[1]]
+            words <- unlist(words$content)
+            if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
           
-          if (!is.null(predictList)) {  
-            wordList <- list()
-            for (i in predictList[1:10]) {
-              words <- lapply(i, stemCompletion_mod)[[1]]
-              words <- unlist(words$content)
-              if (!words=="NA") {wordList <-unlist(c(wordList, words))}
-            }
-            return(wordList)
-          }  
-          
-          ######################## UNIGRAM
-          
-          if(nrow(match_B) == 0) {
-            n1_table <- n1_table[order(-Pgt)]
-            predictList <-  n1_table[1:5]
-            
-            wordList <- list()
-            for (i in predictList[1:10]) {
-              words <- lapply(i, stemCompletion_mod)[[1]]
-              words <- unlist(words$content)
-              if (!words=="NA") {wordList <-unlist(c(wordList, words))}
-            }
-            return(wordList)
-          }
-        }}}
-
+          return(predictList)
+        }
+      }}}
   x <- predictGT(input$textGT)
   x <- x[1:5]
   word1 <- x[1]
@@ -487,33 +483,33 @@ dataset <- reactive ({
   if (is.null(word5)) {word5<-""}
   if (is.na(word5)) {word5<-""}
   
- list <- c(word1, word2, word3, word4, word5)
+  list <- c(word1, word2, word3, word4, word5)
 })
 
-   output$b1 <- renderUI({ 
-     withProgress(session, min=1, max=15, expr={
-       for(i in 1:15) {
-         setProgress(message = 'Loading...',
-                     detail = 'Please wait until the buttons below the text box pop up.',
-                     value=i)
-         print(i)
-         Sys.sleep(0.1)
-       }
-     })
-     actionButton("word1", label = dataset()[1]) # return top 1 predicted word
-   })
-   output$b2 <- renderUI({ 
-     actionButton("word2", label = dataset()[2]) # return top 2 predicted word
-   })
-   output$b3 <- renderUI({ 
-     actionButton("word3", label = dataset()[3]) # return top 3 predicted word
-   })
-   output$b4 <- renderUI({ 
-     actionButton("word4", label = dataset()[4]) # return top 4 predicted word
-   })
-   output$b5 <- renderUI({ 
-     actionButton("word5", label = dataset()[5]) # return top 5 predicted word
-   })
+output$b1 <- renderUI({ 
+  withProgress(session, min=1, max=15, expr={
+    for(i in 1:5) {
+      setProgress(message = 'Loading...',
+                  detail = 'Please wait until the buttons below the text box pop up.',
+                  value=i)
+      print(i)
+      Sys.sleep(0.1)
+    }
+  })
+  actionButton("word1", label = dataset()[1]) # return top 1 predicted word
+})
+output$b2 <- renderUI({ 
+  actionButton("word2", label = dataset()[2]) # return top 2 predicted word
+})
+output$b3 <- renderUI({ 
+  actionButton("word3", label = dataset()[3]) # return top 3 predicted word
+})
+output$b4 <- renderUI({ 
+  actionButton("word4", label = dataset()[4]) # return top 4 predicted word
+})
+output$b5 <- renderUI({ 
+  actionButton("word5", label = dataset()[5]) # return top 5 predicted word
+})
 
 ####### KN TEXT AREA CODES ##########
 dataset1 <- reactive ({  
@@ -529,7 +525,7 @@ dataset1 <- reactive ({
     len <- length(sl)
     
     trigram <- paste(sl[len-2], sl[len-1], sl[len])
-    elems <- unlist(strsplit(trigram, " " ))
+    elems <- unlist(strsplit(trigram, "\\ " ))
     
     if (is.null(elems)) {return(predictList)}
     
@@ -537,90 +533,94 @@ dataset1 <- reactive ({
     setnames(m, c("word1", "word2", "word3"))
     m$start <- paste(m$word1, m$word2, m$word3)
     
-    match_Q <- subset(new_table4, start == m$start)
+    setkey(new_table4, start)
+    setkey(m, start)
+    match_Q <- new_table4[start==m$start]
     
     if(nrow(match_Q) > 0) { 
       # find the largest probability
       match_Q <- match_Q[order(-Pkn)]
-      predictList <- match_Q$word4
-      #maxP <- max(match_Q$Pgt)
-      #predictList <-  match_Q$word4[match_Q$Pgt == maxP]
+      predictList <- match_Q$word4[1:5]
     }
     
     if (!is.null(predictList)) {  
       wordList <- list()
-      for (i in predictList[1:10]) {
+      for (i in predictList) {
         words <- lapply(i, stemCompletion_mod)[[1]]
         words <- unlist(words$content)
         if (!words=="NA") {wordList <-unlist(c(wordList, words))}
       }
       return(wordList)
-    }  
+    }
     
     ############## TRIGRAMS
     if(nrow(match_Q) == 0) {
       bigram <- paste(sl[len-1], sl[len])
-      elems <- unlist(strsplit(bigram, " " ))
+      elems <- unlist(strsplit(bigram, "\\ " ))
       m <- data.table(matrix(elems, ncol = 2, byrow = TRUE))
       setnames(m, c("word1", "word2"))
       m$start <- paste(m$word1, m$word2)
       
-      match_T <- subset(new_table3, start == m$start)
+      setkey(new_table3, start)
+      setkey(m, start)
+      match_T <- new_table3[start==m$start]
       
       if(nrow(match_T) > 0) { 
         # find the largest probability
         match_T <- match_T[order(-Pkn)]
-        predictList <- match_T$word3
+        predictList <- match_T$word3[1:5]
       }
       
       if (!is.null(predictList)) {  
         wordList <- list()
-        for (i in predictList[1:10]) {
+        for (i in predictList) {
           words <- lapply(i, stemCompletion_mod)[[1]]
           words <- unlist(words$content)
           if (!words=="NA") {wordList <-unlist(c(wordList, words))}
         }
         return(wordList)
-      }  
+      }
       
       ################## BIGRAMS
       if (nrow(match_T)==0) {
         unigram <- paste(sl[len])
-        elems <- unlist(strsplit(unigram, " " ))
+        elems <- unlist(strsplit(unigram, "\\ " ))
         m <- data.table(matrix(elems, ncol = 1, byrow = TRUE))
         setnames(m, c("word1"))
         m$start <- paste(m$word1)
         
-        match_B <- subset(new_table2, start == m$start)
+        setkey(new_table2, start)
+        setkey(m, start)
+        match_B <- new_table2[start==m$start]
         
         if(nrow(match_B) > 0) { 
-          # find the largest probability
           match_B <- match_B[order(-Pkn)]
-          predictList <- match_B$word2
-          
+          predictList <- match_B$word2[1:5]
         }
         
         if (!is.null(predictList)) {  
           wordList <- list()
-          for (i in predictList[1:10]) {
+          for (i in predictList) {
             words <- lapply(i, stemCompletion_mod)[[1]]
             words <- unlist(words$content)
             if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
           return(wordList)
-        }  
+        }
         
         ######################## UNIGRAM
         
         if(nrow(match_B) == 0) {
-          new_table1 <- new_table1[order(-Pgt)]
-          predictList <-  new_table1[1:5]
+          n1_table <- n1_table[order(-Pgt)]
+          predictList <-  n1_table[1:5]
+          
           wordList <- list()
-          for (i in predictList[1:10]) {
+          for (i in predictList) {
             words <- lapply(i, stemCompletion_mod)[[1]]
             words <- unlist(words$content)
             if (!words=="NA") {wordList <-unlist(c(wordList, words))}
           }
+          
           return(wordList)
         }
       }}}
@@ -647,7 +647,7 @@ dataset1 <- reactive ({
 
 output$b6 <- renderUI({ 
   withProgress(session, min=1, max=15, expr={
-    for(i in 1:15) {
+    for(i in 1:5) {
       setProgress(message = 'Loading...',
                   detail = 'Please wait until the buttons below the text box pop up.',
                   value=i)
@@ -671,7 +671,6 @@ output$b10 <- renderUI({
   
 })
 
-})
 })
 
 
