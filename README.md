@@ -13,7 +13,7 @@ This application is about the analysis of text data and natural language process
 1. An intermediate R markdown report that describes in plain language, plots, and code your exploratory analysis of the course data set. It can be found here: http://rpubs.com/Snowcreeks/41538
 
 2. A Shiny app that takes as input a phrase (multiple words), one clicks submit, and it predicts the next word. The .R files for the shinyapp are included. Data files are available upon request.
-It can be found here: https://peggyfan.shinyapps.io/textPrediction/
+It can be found here: https://peggyfan.shinyapps.io/textPredictionGT/
 
 3. A 5 slide deck created with R presentations pitching your algorithm and app to your boss or investor.
 It can be found here: http://rpubs.com/Snowcreeks/49178
