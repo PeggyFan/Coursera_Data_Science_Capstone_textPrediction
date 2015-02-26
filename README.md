@@ -18,4 +18,4 @@ It can be found here: https://peggyfan.shinyapps.io/textPredictionGT/
 3. A 5 slide deck created with R presentations pitching your algorithm and app to your boss or investor.
 It can be found here: http://rpubs.com/Snowcreeks/49178
 
-
+*Codes for the Shiny app are available upon request. 
